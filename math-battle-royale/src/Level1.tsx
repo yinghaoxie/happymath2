@@ -29,148 +29,422 @@ export default function Level1({ onComplete }: Level1Props) {
 
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(0x87ceeb);
-    scene.fog = new THREE.FogExp2(0x87ceeb, 0.0015);
+    scene.fog = new THREE.FogExp2(0x87ceeb, 0.002);
 
     const camera = new THREE.PerspectiveCamera(60, containerRef.current.clientWidth / containerRef.current.clientHeight, 0.1, 3000);
-    camera.position.set(-100, 500, 800);
+    camera.position.set(-50, 400, 600);
     camera.lookAt(0, 200, 0);
     const cameraRef = { current: camera };
 
-    const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+    const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance', alpha: false });
     renderer.setSize(containerRef.current.clientWidth, containerRef.current.clientHeight);
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 1.2;
+    renderer.toneMappingExposure = 1.3;
+    renderer.localClippingEnabled = true;
     containerRef.current.appendChild(renderer.domElement);
 
-    const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
     scene.add(ambientLight);
     
-    const directionalLight = new THREE.DirectionalLight(0xffdfba, 1.2);
+    const directionalLight = new THREE.DirectionalLight(0xffdfba, 1.5);
     directionalLight.position.set(200, 600, 300);
     directionalLight.castShadow = true;
-    directionalLight.shadow.mapSize.width = 2048;
-    directionalLight.shadow.mapSize.height = 2048;
+    directionalLight.shadow.mapSize.width = 4096;
+    directionalLight.shadow.mapSize.height = 4096;
+    directionalLight.shadow.camera.near = 0.5;
+    directionalLight.shadow.camera.far = 2000;
+    directionalLight.shadow.camera.left = -500;
+    directionalLight.shadow.camera.right = 500;
+    directionalLight.shadow.camera.top = 500;
+    directionalLight.shadow.camera.bottom = -500;
+    directionalLight.shadow.bias = -0.0001;
     scene.add(directionalLight);
-    scene.add(new THREE.HemisphereLight(0x87ceeb, 0x3d5c3d, 0.6));
+    scene.add(new THREE.HemisphereLight(0x87ceeb, 0x3d5c3d, 0.7));
 
-    const groundGeometry = new THREE.PlaneGeometry(2000, 2000, 100, 100);
+    // Ground with better texture
+    const groundGeometry = new THREE.PlaneGeometry(2000, 2000, 120, 120);
     const colors: number[] = [];
     const positions = groundGeometry.attributes.position.array;
     for (let i = 0; i < positions.length; i += 3) {
-      const noise = Math.sin(positions[i] * 0.01) * Math.cos(positions[i + 1] * 0.01) * 0.1;
-      colors.push(0.2 + noise, 0.5 + noise * 0.5, 0.2);
+      const noise = Math.sin(positions[i] * 0.01) * Math.cos(positions[i + 1] * 0.01) * 0.15;
+      positions[i + 2] += noise * 5;
+      const grassColor = 0.25 + noise * 0.3;
+      colors.push(grassColor, 0.55 + noise * 0.4, 0.25);
     }
     groundGeometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
-    const ground = new THREE.Mesh(groundGeometry, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.9 }));
+    groundGeometry.computeVertexNormals();
+    const ground = new THREE.Mesh(groundGeometry, new THREE.MeshStandardMaterial({ 
+      vertexColors: true, 
+      roughness: 0.8,
+      metalness: 0.1
+    }));
     ground.rotation.x = -Math.PI / 2;
     ground.position.y = -5;
     ground.receiveShadow = true;
     scene.add(ground);
 
-    const sea = new THREE.Mesh(new THREE.PlaneGeometry(2000, 2000), new THREE.MeshStandardMaterial({ color: 0x1e90ff, transparent: true, opacity: 0.4, metalness: 0.8 }));
+    // Sea with animation
+    const seaGeometry = new THREE.PlaneGeometry(2000, 2000, 50, 50);
+    const sea = new THREE.Mesh(seaGeometry, new THREE.MeshStandardMaterial({ 
+      color: 0x1e90ff, 
+      transparent: true, 
+      opacity: 0.5, 
+      metalness: 0.9,
+      roughness: 0.2,
+      side: THREE.DoubleSide
+    }));
     sea.rotation.x = -Math.PI / 2;
     sea.position.y = 0;
     scene.add(sea);
 
+    // Enhanced Airplane with more details
     const airplaneGroup = new THREE.Group();
-    const fuselage = new THREE.Mesh(new THREE.CylinderGeometry(8, 8, 50, 16), new THREE.MeshStandardMaterial({ color: 0xff6347, roughness: 0.3, metalness: 0.7 }));
+    
+    // Fuselage with gradient
+    const fuselage = new THREE.Mesh(
+      new THREE.CylinderGeometry(8, 8, 50, 24),
+      new THREE.MeshStandardMaterial({ 
+        color: 0xff6347, 
+        roughness: 0.25, 
+        metalness: 0.8,
+        envMapIntensity: 1.0
+      })
+    );
     fuselage.rotation.z = Math.PI / 2;
     fuselage.castShadow = true;
     airplaneGroup.add(fuselage);
-    const wings = new THREE.Mesh(new THREE.BoxGeometry(15, 2, 60), new THREE.MeshStandardMaterial({ color: 0xcd5c5c, roughness: 0.3, metalness: 0.7 }));
+    
+    // Cockpit windows
+    const cockpit = new THREE.Mesh(
+      new THREE.BoxGeometry(12, 6, 8),
+      new THREE.MeshStandardMaterial({ 
+        color: 0x4fc3f7, 
+        transparent: true, 
+        opacity: 0.85,
+        roughness: 0.1,
+        metalness: 0.9
+      })
+    );
+    cockpit.position.set(18, 6, 0);
+    airplaneGroup.add(cockpit);
+    
+    // Main wings
+    const wings = new THREE.Mesh(
+      new THREE.BoxGeometry(15, 2.5, 70),
+      new THREE.MeshStandardMaterial({ 
+        color: 0xcd5c5c, 
+        roughness: 0.3, 
+        metalness: 0.75 
+      })
+    );
     wings.castShadow = true;
     airplaneGroup.add(wings);
-    const tail = new THREE.Mesh(new THREE.BoxGeometry(10, 2, 20), new THREE.MeshStandardMaterial({ color: 0xcd5c5c }));
-    tail.position.set(-20, 5, 0);
-    airplaneGroup.add(tail);
-    const cockpit = new THREE.Mesh(new THREE.SphereGeometry(6, 16, 16), new THREE.MeshStandardMaterial({ color: 0x87ceeb, transparent: true, opacity: 0.7 }));
-    cockpit.position.set(15, 5, 0);
-    airplaneGroup.add(cockpit);
-    airplaneGroup.position.set(-400, 800, 0);
+    
+    // Tail wing
+    const tailWing = new THREE.Mesh(
+      new THREE.BoxGeometry(12, 2.5, 25),
+      new THREE.MeshStandardMaterial({ color: 0xcd5c5c, roughness: 0.3, metalness: 0.75 })
+    );
+    tailWing.position.set(-20, 8, 0);
+    tailWing.castShadow = true;
+    airplaneGroup.add(tailWing);
+    
+    // Vertical stabilizer
+    const verticalStab = new THREE.Mesh(
+      new THREE.BoxGeometry(8, 15, 2.5),
+      new THREE.MeshStandardMaterial({ color: 0xcd5c5c, roughness: 0.3, metalness: 0.75 })
+    );
+    verticalStab.position.set(-20, 12, 0);
+    verticalStab.castShadow = true;
+    airplaneGroup.add(verticalStab);
+    
+    // Engine props
+    const propeller = new THREE.Mesh(
+      new THREE.BoxGeometry(2, 20, 2),
+      new THREE.MeshStandardMaterial({ color: 0x333333, metalness: 0.9 })
+    );
+    propeller.position.set(25, 0, 0);
+    airplaneGroup.add(propeller);
+    
+    airplaneGroup.position.set(-300, 800, 0);
     scene.add(airplaneGroup);
     airplaneGroupRef.current = airplaneGroup;
 
+    // Enhanced Player character
     const playerGroup = new THREE.Group();
-    const body = new THREE.Mesh(new THREE.CapsuleGeometry(4, 12, 8, 16), new THREE.MeshStandardMaterial({ color: 0xffff00, roughness: 0.5 }));
+    
+    // Body with backpack
+    const body = new THREE.Mesh(
+      new THREE.CapsuleGeometry(5, 14, 12, 20),
+      new THREE.MeshStandardMaterial({ 
+        color: 0xffd700, 
+        roughness: 0.4,
+        metalness: 0.3
+      })
+    );
     body.castShadow = true;
     playerGroup.add(body);
-    const head = new THREE.Mesh(new THREE.SphereGeometry(5, 16, 16), new THREE.MeshStandardMaterial({ color: 0xffccaa }));
-    head.position.y = 10;
+    
+    // Backpack
+    const backpack = new THREE.Mesh(
+      new THREE.BoxGeometry(6, 10, 4),
+      new THREE.MeshStandardMaterial({ color: 0x8b4513, roughness: 0.6 })
+    );
+    backpack.position.set(0, 2, -5);
+    backpack.castShadow = true;
+    playerGroup.add(backpack);
+    
+    // Head with helmet
+    const head = new THREE.Mesh(
+      new THREE.SphereGeometry(6, 20, 20),
+      new THREE.MeshStandardMaterial({ color: 0xffccaa, roughness: 0.5 })
+    );
+    head.position.y = 11;
     head.castShadow = true;
     playerGroup.add(head);
-    playerGroup.position.set(-400, 800, 15);
+    
+    // Helmet
+    const helmet = new THREE.Mesh(
+      new THREE.SphereGeometry(6.5, 16, 16, 0, Math.PI * 2, 0, Math.PI / 2.2),
+      new THREE.MeshStandardMaterial({ color: 0x4a4a4a, roughness: 0.3, metalness: 0.6 })
+    );
+    helmet.position.y = 12;
+    helmet.castShadow = true;
+    playerGroup.add(helmet);
+    
+    // Arms
+    const leftArm = new THREE.Mesh(
+      new THREE.CapsuleGeometry(2, 8, 8, 12),
+      new THREE.MeshStandardMaterial({ color: 0xffd700 })
+    );
+    leftArm.position.set(-7, 5, 0);
+    leftArm.rotation.z = 0.3;
+    leftArm.castShadow = true;
+    playerGroup.add(leftArm);
+    
+    const rightArm = new THREE.Mesh(
+      new THREE.CapsuleGeometry(2, 8, 8, 12),
+      new THREE.MeshStandardMaterial({ color: 0xffd700 })
+    );
+    rightArm.position.set(7, 5, 0);
+    rightArm.rotation.z = -0.3;
+    rightArm.castShadow = true;
+    playerGroup.add(rightArm);
+    
+    // Legs
+    const leftLeg = new THREE.Mesh(
+      new THREE.CapsuleGeometry(2.5, 10, 8, 12),
+      new THREE.MeshStandardMaterial({ color: 0x2c3e50 })
+    );
+    leftLeg.position.set(-3, -9, 0);
+    leftLeg.castShadow = true;
+    playerGroup.add(leftLeg);
+    
+    const rightLeg = new THREE.Mesh(
+      new THREE.CapsuleGeometry(2.5, 10, 8, 12),
+      new THREE.MeshStandardMaterial({ color: 0x2c3e50 })
+    );
+    rightLeg.position.set(3, -9, 0);
+    rightLeg.castShadow = true;
+    playerGroup.add(rightLeg);
+    
+    playerGroup.position.set(-300, 800, 20);
     scene.add(playerGroup);
     playerGroupRef.current = playerGroup;
 
-    const mountain = new THREE.Mesh(new THREE.ConeGeometry(100, 120, 8, 1), new THREE.MeshStandardMaterial({ color: 0x8b4513, roughness: 0.95, flatShading: true }));
-    mountain.position.set(300, 55, 0);
-    mountain.castShadow = true;
-    mountain.receiveShadow = true;
-    scene.add(mountain);
-    const snowCap = new THREE.Mesh(new THREE.ConeGeometry(40, 30, 8, 1), new THREE.MeshStandardMaterial({ color: 0xffffff, flatShading: true }));
-    snowCap.position.set(300, 110, 0);
-    scene.add(snowCap);
+    // Enhanced Mountains with multiple peaks
+    const mountainGroup = new THREE.Group();
+    
+    // Main mountain
+    const mainMountain = new THREE.Mesh(
+      new THREE.ConeGeometry(120, 140, 8, 1),
+      new THREE.MeshStandardMaterial({ 
+        color: 0x8b4513, 
+        roughness: 0.9,
+        flatShading: true
+      })
+    );
+    mainMountain.position.set(350, 65, 0);
+    mainMountain.castShadow = true;
+    mainMountain.receiveShadow = true;
+    mountainGroup.add(mainMountain);
+    
+    // Snow cap
+    const snowCap = new THREE.Mesh(
+      new THREE.ConeGeometry(50, 40, 8, 1),
+      new THREE.MeshStandardMaterial({ 
+        color: 0xffffff, 
+        flatShading: true,
+        roughness: 0.95
+      })
+    );
+    snowCap.position.set(350, 130, 0);
+    mountainGroup.add(snowCap);
+    
+    // Secondary peak
+    const secondaryMountain = new THREE.Mesh(
+      new THREE.ConeGeometry(80, 100, 8, 1),
+      new THREE.MeshStandardMaterial({ 
+        color: 0xa0522d, 
+        roughness: 0.9,
+        flatShading: true
+      })
+    );
+    secondaryMountain.position.set(450, 45, 50);
+    secondaryMountain.castShadow = true;
+    secondaryMountain.receiveShadow = true;
+    mountainGroup.add(secondaryMountain);
+    
+    const secondarySnow = new THREE.Mesh(
+      new THREE.ConeGeometry(35, 30, 8, 1),
+      new THREE.MeshStandardMaterial({ color: 0xffffff, flatShading: true })
+    );
+    secondarySnow.position.set(450, 105, 50);
+    mountainGroup.add(secondarySnow);
+    
+    scene.add(mountainGroup);
 
-    const cloudGeometry = new THREE.SphereGeometry(30, 8, 8);
-    const cloudMaterial = new THREE.MeshStandardMaterial({ color: 0xffffff, transparent: true, opacity: 0.6, flatShading: true });
-    const cloudPositions: number[][] = [[-200, 900, 100], [0, 950, -150], [400, 880, 200], [-100, 1000, -300], [250, 920, -100]];
-    cloudPositions.forEach(pos => {
-      const cloud = new THREE.Mesh(cloudGeometry, cloudMaterial);
-      cloud.position.set(pos[0], pos[1], pos[2]);
-      cloud.scale.set(1 + Math.random(), 0.6 + Math.random() * 0.4, 1 + Math.random());
-      scene.add(cloud);
-      cloudParticlesRef.current.push(cloud);
+    // Enhanced Clouds with multiple spheres
+    const cloudMaterial = new THREE.MeshStandardMaterial({ 
+      color: 0xffffff, 
+      transparent: true, 
+      opacity: 0.7, 
+      flatShading: true 
+    });
+    
+    function createCloud(x: number, y: number, z: number, scale: number) {
+      const cloud = new THREE.Group();
+      const sphereCount = 5;
+      for (let i = 0; i < sphereCount; i++) {
+        const radius = 25 + Math.random() * 15;
+        const sphere = new THREE.Mesh(
+          new THREE.SphereGeometry(radius, 10, 10),
+          cloudMaterial
+        );
+        sphere.position.set(
+          (Math.random() - 0.5) * 60,
+          (Math.random() - 0.5) * 20,
+          (Math.random() - 0.5) * 40
+        );
+        cloud.add(sphere);
+      }
+      cloud.position.set(x, y, z);
+      cloud.scale.set(scale, scale * 0.7, scale);
+      return cloud;
+    }
+    
+    const clouds = [
+      createCloud(-200, 900, 100, 1.2),
+      createCloud(0, 950, -150, 1.5),
+      createCloud(400, 880, 200, 1.0),
+      createCloud(-100, 1000, -300, 1.3),
+      createCloud(250, 920, -100, 1.1)
+    ];
+    clouds.forEach(c => {
+      scene.add(c);
+      cloudParticlesRef.current.push(c as any);
     });
 
+    // Enhanced Parachute with detailed canopy
     const parachuteGroup = new THREE.Group();
-    const canopy = new THREE.Mesh(new THREE.SphereGeometry(20, 16, 8, 0, Math.PI * 2, 0, Math.PI / 2), new THREE.MeshStandardMaterial({ color: 0xffffff, side: THREE.DoubleSide, transparent: true, opacity: 0.9 }));
-    canopy.castShadow = true;
-    parachuteGroup.add(canopy);
-    const ropePoints: THREE.Vector3[] = [];
+    
+    // Canopy with segments
+    const canopySegments = 12;
+    for (let i = 0; i < canopySegments; i++) {
+      const angle = (i / canopySegments) * Math.PI * 2;
+      const nextAngle = ((i + 1) / canopySegments) * Math.PI * 2;
+      const canopyGeometry = new THREE.BufferGeometry();
+      const vertices = new Float32Array([
+        0, 0, 0,
+        Math.cos(angle) * 22, -22, Math.sin(angle) * 22,
+        Math.cos(nextAngle) * 22, -22, Math.sin(nextAngle) * 22
+      ]);
+      canopyGeometry.setAttribute('position', new THREE.BufferAttribute(vertices, 3));
+      const canopyMaterial = new THREE.MeshStandardMaterial({
+        color: i % 2 === 0 ? 0xffffff : 0xff4444,
+        side: THREE.DoubleSide,
+        transparent: true,
+        opacity: 0.95,
+        flatShading: true
+      });
+      const segment = new THREE.Mesh(canopyGeometry, canopyMaterial);
+      segment.castShadow = true;
+      parachuteGroup.add(segment);
+    }
+    
+    // Ropes
+    const ropeMaterial = new THREE.LineBasicMaterial({ color: 0x222222, linewidth: 2 });
     for (let i = 0; i < 8; i++) {
       const angle = (i / 8) * Math.PI * 2;
-      ropePoints.push(new THREE.Vector3(Math.cos(angle) * 15, -20, Math.sin(angle) * 15));
-      ropePoints.push(new THREE.Vector3(0, 0, 0));
+      const ropePoints = [
+        new THREE.Vector3(Math.cos(angle) * 18, -22, Math.sin(angle) * 18),
+        new THREE.Vector3(0, 0, 0)
+      ];
+      const rope = new THREE.Line(
+        new THREE.BufferGeometry().setFromPoints(ropePoints),
+        ropeMaterial
+      );
+      parachuteGroup.add(rope);
     }
-    parachuteGroup.add(new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(ropePoints), new THREE.LineBasicMaterial({ color: 0x333333 })));
+    
     parachuteGroup.visible = false;
     scene.add(parachuteGroup);
     parachuteGroupRef.current = parachuteGroup;
 
-    function createLabel(text: string, pos: THREE.Vector3): THREE.Sprite {
+    // Enhanced Labels with clearer text
+    function createLabel(text: string, pos: THREE.Vector3, fontSize: number = 56): THREE.Sprite {
       const canvas = document.createElement('canvas');
-      canvas.width = 512;
-      canvas.height = 128;
+      canvas.width = 1024;
+      canvas.height = 256;
       const ctx = canvas.getContext('2d');
       if (!ctx) return new THREE.Sprite();
-      const grad = ctx.createLinearGradient(0, 0, 512, 128);
-      grad.addColorStop(0, 'rgba(0, 50, 100, 0.85)');
-      grad.addColorStop(1, 'rgba(0, 100, 150, 0.75)');
+      
+      // Gradient background
+      const grad = ctx.createLinearGradient(0, 0, 1024, 256);
+      grad.addColorStop(0, 'rgba(0, 60, 120, 0.92)');
+      grad.addColorStop(1, 'rgba(0, 120, 180, 0.85)');
+      
       ctx.fillStyle = grad;
-      ctx.roundRect(10, 10, 492, 108, 20);
+      ctx.beginPath();
+      ctx.roundRect(20, 20, 984, 216, 30);
       ctx.fill();
-      ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
-      ctx.lineWidth = 3;
+      
+      // Border glow
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.7)';
+      ctx.lineWidth = 5;
       ctx.stroke();
-      ctx.font = 'Bold 48px Arial';
-      ctx.shadowColor = 'rgba(0, 0, 0, 0.8)';
-      ctx.shadowBlur = 8;
+      
+      // Text shadow
+      ctx.shadowColor = 'rgba(0, 0, 0, 0.9)';
+      ctx.shadowBlur = 15;
+      ctx.shadowOffsetX = 4;
+      ctx.shadowOffsetY = 4;
+      
+      // Main text
+      ctx.font = `Bold ${fontSize}px "Microsoft YaHei", Arial`;
       ctx.fillStyle = 'white';
       ctx.textAlign = 'center';
-      ctx.fillText(text, 256, 80);
-      const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(canvas), transparent: true }));
+      ctx.textBaseline = 'middle';
+      ctx.fillText(text, 512, 128);
+      
+      const sprite = new THREE.Sprite(
+        new THREE.SpriteMaterial({ 
+          map: new THREE.CanvasTexture(canvas), 
+          transparent: true 
+        })
+      );
       sprite.position.copy(pos);
-      sprite.scale.set(150, 37.5, 1);
+      sprite.scale.set(200, 50, 1);
       return sprite;
     }
 
-    scene.add(createLabel('✈️ 飞机 +800m', new THREE.Vector3(-400, 860, 0)));
-    scene.add(createLabel('🏔️ 地面 -5m', new THREE.Vector3(0, 30, 80)));
-    scene.add(createLabel('🌊 海平面 0m', new THREE.Vector3(-500, 30, 80)));
-    scene.add(createLabel('⛰️ 山地 +50m', new THREE.Vector3(300, 140, 0)));
+    scene.add(createLabel('✈️ 飞机 +800m', new THREE.Vector3(-300, 870, 0), 64));
+    scene.add(createLabel('🏔️ 地面 -5m', new THREE.Vector3(0, 40, 100), 56));
+    scene.add(createLabel('🌊 海平面 0m', new THREE.Vector3(-400, 40, 100), 56));
+    scene.add(createLabel('⛰️ 山地 +50m', new THREE.Vector3(350, 160, 0), 56));
 
     let animationId: number;
     const clock = new THREE.Clock();
@@ -179,42 +453,78 @@ export default function Level1({ onComplete }: Level1Props) {
       animationId = requestAnimationFrame(animate);
       const delta = clock.getDelta();
 
+      // Animate airplane
       if (airplaneGroupRef.current && airplaneGroupRef.current.position.x < 500) {
-        airplaneGroupRef.current.position.x += 30 * delta;
+        airplaneGroupRef.current.position.x += 35 * delta;
+        // Rotate propeller
+        const propeller = airplaneGroupRef.current.children.find(c => c.position.x > 20);
+        if (propeller) propeller.rotation.x += 15 * delta;
+        
         if (playerGroupRef.current && !isJumping) {
           playerGroupRef.current.position.copy(airplaneGroupRef.current.position);
-          playerGroupRef.current.position.z = 15;
+          playerGroupRef.current.position.z = 20;
         }
       }
 
+      // Animate player falling
       if (isJumping && playerGroupRef.current) {
-        const fallSpeed = parachuteOpen ? 15 : 60;
+        const fallSpeed = parachuteOpen ? 12 : 70;
         playerGroupRef.current.position.y -= fallSpeed * delta;
         playerAltitudeRef.current = playerGroupRef.current.position.y;
         setPlayerAltitude(Math.round(playerAltitudeRef.current));
         
         if (parachuteGroupRef.current) {
           parachuteGroupRef.current.position.copy(playerGroupRef.current.position);
-          parachuteGroupRef.current.position.y += 25;
-          if (parachuteOpen) parachuteGroupRef.current.rotation.z = Math.sin(clock.elapsedTime * 2) * 0.1;
+          parachuteGroupRef.current.position.y += 28;
+          if (parachuteOpen) {
+            parachuteGroupRef.current.rotation.z = Math.sin(clock.elapsedTime * 2) * 0.08;
+            parachuteGroupRef.current.rotation.x = Math.sin(clock.elapsedTime * 1.5) * 0.05;
+          }
         }
-        if (!parachuteOpen) playerGroupRef.current.rotation.x += delta * 2;
+        
+        // Rotate player during free fall
+        if (!parachuteOpen) {
+          playerGroupRef.current.rotation.x += delta * 1.5;
+          playerGroupRef.current.rotation.z = Math.sin(clock.elapsedTime * 3) * 0.1;
+        } else {
+          // Upright position with parachute
+          playerGroupRef.current.rotation.x *= 0.95;
+          playerGroupRef.current.rotation.z *= 0.95;
+        }
+        
         if (playerGroupRef.current.position.y <= -5) {
           playerGroupRef.current.position.y = -5;
           setIsJumping(false);
         }
       }
 
-      cloudParticlesRef.current.forEach(cloud => {
-        cloud.position.x += 5 * delta;
-        if (cloud.position.x > 600) cloud.position.x = -600;
+      // Animate clouds
+      cloudParticlesRef.current.forEach((cloud: any) => {
+        if (cloud.position) {
+          cloud.position.x += 6 * delta;
+          if (cloud.position.x > 700) cloud.position.x = -700;
+        }
       });
 
+      // Smooth camera follow
       if (cameraRef.current && playerGroupRef.current) {
-        cameraRef.current.position.x += (playerGroupRef.current.position.x - 100 - cameraRef.current.position.x) * 0.05;
-        cameraRef.current.position.y += (playerGroupRef.current.position.y + 200 - cameraRef.current.position.y) * 0.05;
+        const targetX = playerGroupRef.current.position.x - 80;
+        const targetY = playerGroupRef.current.position.y + 180;
+        cameraRef.current.position.x += (targetX - cameraRef.current.position.x) * 0.04;
+        cameraRef.current.position.y += (targetY - cameraRef.current.position.y) * 0.04;
+        cameraRef.current.position.z += (350 - cameraRef.current.position.z) * 0.04;
         cameraRef.current.lookAt(playerGroupRef.current.position);
       }
+
+      // Animate sea waves
+      const time = clock.elapsedTime;
+      const seaPositions = seaGeometry.attributes.position.array;
+      for (let i = 0; i < seaPositions.length; i += 3) {
+        const x = seaPositions[i];
+        const y = seaPositions[i + 1];
+        seaPositions[i + 2] = Math.sin(x * 0.02 + time) * 2 + Math.cos(y * 0.015 + time * 0.8) * 2;
+      }
+      seaGeometry.attributes.position.needsUpdate = true;
 
       renderer.render(scene, camera);
     };
@@ -231,9 +541,12 @@ export default function Level1({ onComplete }: Level1Props) {
     return () => {
       cancelAnimationFrame(animationId);
       window.removeEventListener('resize', handleResize);
-      if (containerRef.current && renderer.domElement) containerRef.current.removeChild(renderer.domElement);
+      if (containerRef.current && renderer.domElement) {
+        containerRef.current.removeChild(renderer.domElement);
+      }
       renderer.dispose();
       groundGeometry.dispose();
+      seaGeometry.dispose();
     };
   }, []);
 
