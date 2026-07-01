@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 interface Level1Props {
   onComplete?: () => void;
@@ -7,316 +7,322 @@ interface Level1Props {
 
 export default function Level1({ onComplete }: Level1Props) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const sceneRef = useRef<THREE.Scene | null>(null);
-  const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
-  const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
-  const airplaneRef = useRef<THREE.Mesh | null>(null);
-  const groundRef = useRef<THREE.Mesh | null>(null);
-  const playerRef = useRef<THREE.Mesh | null>(null);
-  const parachuteRef = useRef<THREE.Mesh | null>(null);
+  const airplaneGroupRef = useRef<THREE.Group | null>(null);
+  const playerGroupRef = useRef<THREE.Group | null>(null);
+  const parachuteGroupRef = useRef<THREE.Group | null>(null);
+  const cloudParticlesRef = useRef<THREE.Mesh[]>([]);
   
-  // Game state
+  const [playerAltitude, setPlayerAltitude] = useState(800);
+  const [isJumping, setIsJumping] = useState(false);
+  const [parachuteOpen, setParachuteOpen] = useState(false);
+  const [gameComplete, setGameComplete] = useState(false);
+  const [task1Correct, setTask1Correct] = useState(false);
+  const [task2Correct, setTask2Correct] = useState(false);
+  const [feedback, setFeedback] = useState<{text: string, type: 'success' | 'error' | 'info'}>({text: '等待作答...', type: 'info'});
+  
   const playerAltitudeRef = useRef(800);
-  const isJumpingRef = useRef(false);
-  const parachuteOpenRef = useRef(false);
-  const answerInputRef = useRef<HTMLInputElement>(null);
-  const feedbackRef = useRef<HTMLDivElement>(null);
+  const answer1Ref = useRef<HTMLInputElement>(null);
+  const answer2Ref = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (!containerRef.current) return;
 
-    // Scene setup
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(0x87ceeb);
-    sceneRef.current = scene;
+    scene.fog = new THREE.FogExp2(0x87ceeb, 0.0015);
 
-    // Camera
-    const camera = new THREE.PerspectiveCamera(
-      75,
-      containerRef.current.clientWidth / containerRef.current.clientHeight,
-      0.1,
-      2000
-    );
-    camera.position.set(0, 400, 600);
+    const camera = new THREE.PerspectiveCamera(60, containerRef.current.clientWidth / containerRef.current.clientHeight, 0.1, 3000);
+    camera.position.set(-100, 500, 800);
     camera.lookAt(0, 200, 0);
-    cameraRef.current = camera;
+    const cameraRef = { current: camera };
 
-    // Renderer
-    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
     renderer.setSize(containerRef.current.clientWidth, containerRef.current.clientHeight);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.2;
     containerRef.current.appendChild(renderer.domElement);
-    rendererRef.current = renderer;
 
-    // Lighting
-    const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
     scene.add(ambientLight);
     
-    const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
-    directionalLight.position.set(100, 500, 200);
+    const directionalLight = new THREE.DirectionalLight(0xffdfba, 1.2);
+    directionalLight.position.set(200, 600, 300);
     directionalLight.castShadow = true;
+    directionalLight.shadow.mapSize.width = 2048;
+    directionalLight.shadow.mapSize.height = 2048;
     scene.add(directionalLight);
+    scene.add(new THREE.HemisphereLight(0x87ceeb, 0x3d5c3d, 0.6));
 
-    // Ground (sea level with negative elevation area)
-    const groundGeometry = new THREE.PlaneGeometry(1000, 1000);
-    const groundMaterial = new THREE.MeshStandardMaterial({ 
-      color: 0x228b22,
-      transparent: true,
-      opacity: 0.9
-    });
-    const ground = new THREE.Mesh(groundGeometry, groundMaterial);
+    const groundGeometry = new THREE.PlaneGeometry(2000, 2000, 100, 100);
+    const colors: number[] = [];
+    const positions = groundGeometry.attributes.position.array;
+    for (let i = 0; i < positions.length; i += 3) {
+      const noise = Math.sin(positions[i] * 0.01) * Math.cos(positions[i + 1] * 0.01) * 0.1;
+      colors.push(0.2 + noise, 0.5 + noise * 0.5, 0.2);
+    }
+    groundGeometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+    const ground = new THREE.Mesh(groundGeometry, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.9 }));
     ground.rotation.x = -Math.PI / 2;
-    ground.position.y = -5; // Ground level at -5m
+    ground.position.y = -5;
     ground.receiveShadow = true;
     scene.add(ground);
-    groundRef.current = ground;
 
-    // Sea level indicator
-    const seaGeometry = new THREE.PlaneGeometry(1000, 1000);
-    const seaMaterial = new THREE.MeshStandardMaterial({ 
-      color: 0x1e90ff,
-      transparent: true,
-      opacity: 0.5
-    });
-    const sea = new THREE.Mesh(seaGeometry, seaMaterial);
+    const sea = new THREE.Mesh(new THREE.PlaneGeometry(2000, 2000), new THREE.MeshStandardMaterial({ color: 0x1e90ff, transparent: true, opacity: 0.4, metalness: 0.8 }));
     sea.rotation.x = -Math.PI / 2;
     sea.position.y = 0;
     scene.add(sea);
 
-    // Airplane
-    const airplaneGeometry = new THREE.BoxGeometry(60, 15, 20);
-    const airplaneMaterial = new THREE.MeshStandardMaterial({ color: 0xff6347 });
-    const airplane = new THREE.Mesh(airplaneGeometry, airplaneMaterial);
-    airplane.position.set(-300, 800, 0);
-    airplane.castShadow = true;
-    scene.add(airplane);
-    airplaneRef.current = airplane;
+    const airplaneGroup = new THREE.Group();
+    const fuselage = new THREE.Mesh(new THREE.CylinderGeometry(8, 8, 50, 16), new THREE.MeshStandardMaterial({ color: 0xff6347, roughness: 0.3, metalness: 0.7 }));
+    fuselage.rotation.z = Math.PI / 2;
+    fuselage.castShadow = true;
+    airplaneGroup.add(fuselage);
+    const wings = new THREE.Mesh(new THREE.BoxGeometry(15, 2, 60), new THREE.MeshStandardMaterial({ color: 0xcd5c5c, roughness: 0.3, metalness: 0.7 }));
+    wings.castShadow = true;
+    airplaneGroup.add(wings);
+    const tail = new THREE.Mesh(new THREE.BoxGeometry(10, 2, 20), new THREE.MeshStandardMaterial({ color: 0xcd5c5c }));
+    tail.position.set(-20, 5, 0);
+    airplaneGroup.add(tail);
+    const cockpit = new THREE.Mesh(new THREE.SphereGeometry(6, 16, 16), new THREE.MeshStandardMaterial({ color: 0x87ceeb, transparent: true, opacity: 0.7 }));
+    cockpit.position.set(15, 5, 0);
+    airplaneGroup.add(cockpit);
+    airplaneGroup.position.set(-400, 800, 0);
+    scene.add(airplaneGroup);
+    airplaneGroupRef.current = airplaneGroup;
 
-    // Player (before jump)
-    const playerGeometry = new THREE.SphereGeometry(5, 16, 16);
-    const playerMaterial = new THREE.MeshStandardMaterial({ color: 0xffff00 });
-    const player = new THREE.Mesh(playerGeometry, playerMaterial);
-    player.position.set(-300, 800, 10);
-    player.castShadow = true;
-    scene.add(player);
-    playerRef.current = player;
+    const playerGroup = new THREE.Group();
+    const body = new THREE.Mesh(new THREE.CapsuleGeometry(4, 12, 8, 16), new THREE.MeshStandardMaterial({ color: 0xffff00, roughness: 0.5 }));
+    body.castShadow = true;
+    playerGroup.add(body);
+    const head = new THREE.Mesh(new THREE.SphereGeometry(5, 16, 16), new THREE.MeshStandardMaterial({ color: 0xffccaa }));
+    head.position.y = 10;
+    head.castShadow = true;
+    playerGroup.add(head);
+    playerGroup.position.set(-400, 800, 15);
+    scene.add(playerGroup);
+    playerGroupRef.current = playerGroup;
 
-    // Mountain
-    const mountainGeometry = new THREE.ConeGeometry(80, 100, 4);
-    const mountainMaterial = new THREE.MeshStandardMaterial({ color: 0x8b4513 });
-    const mountain = new THREE.Mesh(mountainGeometry, mountainMaterial);
-    mountain.position.set(200, 45, 0); // Base at -5, peak at ~95
+    const mountain = new THREE.Mesh(new THREE.ConeGeometry(100, 120, 8, 1), new THREE.MeshStandardMaterial({ color: 0x8b4513, roughness: 0.95, flatShading: true }));
+    mountain.position.set(300, 55, 0);
     mountain.castShadow = true;
+    mountain.receiveShadow = true;
     scene.add(mountain);
+    const snowCap = new THREE.Mesh(new THREE.ConeGeometry(40, 30, 8, 1), new THREE.MeshStandardMaterial({ color: 0xffffff, flatShading: true }));
+    snowCap.position.set(300, 110, 0);
+    scene.add(snowCap);
 
-    // Parachute (hidden initially)
-    const parachuteGeometry = new THREE.SphereGeometry(15, 16, 16, 0, Math.PI * 2, 0, Math.PI / 2);
-    const parachuteMaterial = new THREE.MeshStandardMaterial({ 
-      color: 0xffffff,
-      side: THREE.DoubleSide
+    const cloudGeometry = new THREE.SphereGeometry(30, 8, 8);
+    const cloudMaterial = new THREE.MeshStandardMaterial({ color: 0xffffff, transparent: true, opacity: 0.6, flatShading: true });
+    const cloudPositions: number[][] = [[-200, 900, 100], [0, 950, -150], [400, 880, 200], [-100, 1000, -300], [250, 920, -100]];
+    cloudPositions.forEach(pos => {
+      const cloud = new THREE.Mesh(cloudGeometry, cloudMaterial);
+      cloud.position.set(pos[0], pos[1], pos[2]);
+      cloud.scale.set(1 + Math.random(), 0.6 + Math.random() * 0.4, 1 + Math.random());
+      scene.add(cloud);
+      cloudParticlesRef.current.push(cloud);
     });
-    const parachute = new THREE.Mesh(parachuteGeometry, parachuteMaterial);
-    parachute.visible = false;
-    parachute.position.copy(player.position);
-    scene.add(parachute);
-    parachuteRef.current = parachute;
 
-    // Labels using sprite
-    function createTextLabel(text: string, position: THREE.Vector3): THREE.Sprite {
+    const parachuteGroup = new THREE.Group();
+    const canopy = new THREE.Mesh(new THREE.SphereGeometry(20, 16, 8, 0, Math.PI * 2, 0, Math.PI / 2), new THREE.MeshStandardMaterial({ color: 0xffffff, side: THREE.DoubleSide, transparent: true, opacity: 0.9 }));
+    canopy.castShadow = true;
+    parachuteGroup.add(canopy);
+    const ropePoints: THREE.Vector3[] = [];
+    for (let i = 0; i < 8; i++) {
+      const angle = (i / 8) * Math.PI * 2;
+      ropePoints.push(new THREE.Vector3(Math.cos(angle) * 15, -20, Math.sin(angle) * 15));
+      ropePoints.push(new THREE.Vector3(0, 0, 0));
+    }
+    parachuteGroup.add(new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(ropePoints), new THREE.LineBasicMaterial({ color: 0x333333 })));
+    parachuteGroup.visible = false;
+    scene.add(parachuteGroup);
+    parachuteGroupRef.current = parachuteGroup;
+
+    function createLabel(text: string, pos: THREE.Vector3): THREE.Sprite {
       const canvas = document.createElement('canvas');
-      const context = canvas.getContext('2d');
-      if (!context) return new THREE.Sprite();
-      
-      canvas.width = 256;
-      canvas.height = 64;
-      context.fillStyle = 'rgba(0, 0, 0, 0.7)';
-      context.fillRect(0, 0, 256, 64);
-      context.font = 'Bold 24px Arial';
-      context.fillStyle = 'white';
-      context.textAlign = 'center';
-      context.fillText(text, 128, 40);
-      
-      const texture = new THREE.CanvasTexture(canvas);
-      const material = new THREE.SpriteMaterial({ map: texture });
-      const sprite = new THREE.Sprite(material);
-      sprite.position.copy(position);
-      sprite.scale.set(100, 25, 1);
+      canvas.width = 512;
+      canvas.height = 128;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return new THREE.Sprite();
+      const grad = ctx.createLinearGradient(0, 0, 512, 128);
+      grad.addColorStop(0, 'rgba(0, 50, 100, 0.85)');
+      grad.addColorStop(1, 'rgba(0, 100, 150, 0.75)');
+      ctx.fillStyle = grad;
+      ctx.roundRect(10, 10, 492, 108, 20);
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
+      ctx.lineWidth = 3;
+      ctx.stroke();
+      ctx.font = 'Bold 48px Arial';
+      ctx.shadowColor = 'rgba(0, 0, 0, 0.8)';
+      ctx.shadowBlur = 8;
+      ctx.fillStyle = 'white';
+      ctx.textAlign = 'center';
+      ctx.fillText(text, 256, 80);
+      const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(canvas), transparent: true }));
+      sprite.position.copy(pos);
+      sprite.scale.set(150, 37.5, 1);
       return sprite;
     }
 
-    const airplaneLabel = createTextLabel('飞机 +800m', new THREE.Vector3(-300, 830, 0));
-    const groundLabel = createTextLabel('地面 -5m', new THREE.Vector3(0, 20, 50));
-    const seaLabel = createTextLabel('海平面 0m', new THREE.Vector3(-400, 20, 50));
-    const mountainLabel = createTextLabel('山地 +50m', new THREE.Vector3(200, 120, 0));
-    
-    scene.add(airplaneLabel, groundLabel, seaLabel, mountainLabel);
+    scene.add(createLabel('✈️ 飞机 +800m', new THREE.Vector3(-400, 860, 0)));
+    scene.add(createLabel('🏔️ 地面 -5m', new THREE.Vector3(0, 30, 80)));
+    scene.add(createLabel('🌊 海平面 0m', new THREE.Vector3(-500, 30, 80)));
+    scene.add(createLabel('⛰️ 山地 +50m', new THREE.Vector3(300, 140, 0)));
 
-    // Animation loop
     let animationId: number;
+    const clock = new THREE.Clock();
+    
     const animate = () => {
       animationId = requestAnimationFrame(animate);
+      const delta = clock.getDelta();
 
-      // Move airplane
-      if (airplaneRef.current && airplaneRef.current.position.x < 400) {
-        airplaneRef.current.position.x += 0.5;
-        if (playerRef.current && !isJumpingRef.current) {
-          playerRef.current.position.x = airplaneRef.current.position.x;
-          playerRef.current.position.y = airplaneRef.current.position.y;
+      if (airplaneGroupRef.current && airplaneGroupRef.current.position.x < 500) {
+        airplaneGroupRef.current.position.x += 30 * delta;
+        if (playerGroupRef.current && !isJumping) {
+          playerGroupRef.current.position.copy(airplaneGroupRef.current.position);
+          playerGroupRef.current.position.z = 15;
         }
       }
 
-      // Player falling
-      if (isJumpingRef.current && playerRef.current) {
-        const fallSpeed = parachuteOpenRef.current ? 2 : 8;
-        playerRef.current.position.y -= fallSpeed;
-        playerAltitudeRef.current = playerRef.current.position.y;
+      if (isJumping && playerGroupRef.current) {
+        const fallSpeed = parachuteOpen ? 15 : 60;
+        playerGroupRef.current.position.y -= fallSpeed * delta;
+        playerAltitudeRef.current = playerGroupRef.current.position.y;
+        setPlayerAltitude(Math.round(playerAltitudeRef.current));
         
-        if (parachuteRef.current) {
-          parachuteRef.current.position.copy(playerRef.current.position);
-          parachuteRef.current.position.y += 20;
+        if (parachuteGroupRef.current) {
+          parachuteGroupRef.current.position.copy(playerGroupRef.current.position);
+          parachuteGroupRef.current.position.y += 25;
+          if (parachuteOpen) parachuteGroupRef.current.rotation.z = Math.sin(clock.elapsedTime * 2) * 0.1;
         }
+        if (!parachuteOpen) playerGroupRef.current.rotation.x += delta * 2;
+        if (playerGroupRef.current.position.y <= -5) {
+          playerGroupRef.current.position.y = -5;
+          setIsJumping(false);
+        }
+      }
 
-        // Stop at ground
-        if (playerRef.current.position.y <= -5) {
-          playerRef.current.position.y = -5;
-          isJumpingRef.current = false;
-        }
+      cloudParticlesRef.current.forEach(cloud => {
+        cloud.position.x += 5 * delta;
+        if (cloud.position.x > 600) cloud.position.x = -600;
+      });
+
+      if (cameraRef.current && playerGroupRef.current) {
+        cameraRef.current.position.x += (playerGroupRef.current.position.x - 100 - cameraRef.current.position.x) * 0.05;
+        cameraRef.current.position.y += (playerGroupRef.current.position.y + 200 - cameraRef.current.position.y) * 0.05;
+        cameraRef.current.lookAt(playerGroupRef.current.position);
       }
 
       renderer.render(scene, camera);
     };
-
     animate();
 
-    // Cleanup
+    const handleResize = () => {
+      if (!containerRef.current) return;
+      camera.aspect = containerRef.current.clientWidth / containerRef.current.clientHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(containerRef.current.clientWidth, containerRef.current.clientHeight);
+    };
+    window.addEventListener('resize', handleResize);
+
     return () => {
       cancelAnimationFrame(animationId);
-      if (containerRef.current && renderer.domElement) {
-        containerRef.current.removeChild(renderer.domElement);
-      }
+      window.removeEventListener('resize', handleResize);
+      if (containerRef.current && renderer.domElement) containerRef.current.removeChild(renderer.domElement);
       renderer.dispose();
-      geometryDispose();
+      groundGeometry.dispose();
     };
-
-    function geometryDispose() {
-      // Cleanup geometries and materials
-    }
   }, []);
 
   const handleJump = () => {
-    if (!isJumpingRef.current && playerRef.current && airplaneRef.current) {
-      isJumpingRef.current = true;
-      playerRef.current.position.x = airplaneRef.current.position.x;
+    if (!isJumping && playerGroupRef.current && airplaneGroupRef.current) {
+      setIsJumping(true);
+      playerGroupRef.current.position.x = airplaneGroupRef.current.position.x;
+      setFeedback({text: '🪂 已跳伞！注意观察高度变化...', type: 'info'});
     }
   };
 
   const handleOpenParachute = () => {
-    if (isJumpingRef.current && !parachuteOpenRef.current && parachuteRef.current) {
-      parachuteOpenRef.current = true;
-      parachuteRef.current.visible = true;
+    if (isJumping && !parachuteOpen && parachuteGroupRef.current) {
+      setParachuteOpen(true);
+      parachuteGroupRef.current.visible = true;
+      setFeedback({text: '☂️ 降落伞已打开！下降速度减缓。', type: 'success'});
     }
   };
 
   const checkAnswer1 = () => {
-    if (!answerInputRef.current || !feedbackRef.current) return;
-    const answer = parseInt(answerInputRef.current.value);
-    // Correct answer: 800 - (-5) = 805
+    if (!answer1Ref.current) return;
+    const answer = parseInt(answer1Ref.current.value);
     if (answer === 805) {
-      feedbackRef.current.textContent = '✓ 正确！相对高度差 = 800 - (-5) = 805m';
-      feedbackRef.current.style.color = 'green';
+      setFeedback({text: '✓ 正确！相对高度差 = 800 - (-5) = 805m', type: 'success'});
+      setTask1Correct(true);
     } else {
-      feedbackRef.current.textContent = '✗ 错误。提示：相对高度差 = 飞机高度 - 地面高度';
-      feedbackRef.current.style.color = 'red';
+      setFeedback({text: '✗ 错误。提示：相对高度差 = 飞机高度 - 地面高度 = 800 - (?)', type: 'error'});
     }
   };
 
   const checkAnswer2 = () => {
-    if (!answerInputRef.current || !feedbackRef.current) return;
-    const answer = parseInt(answerInputRef.current.value);
-    // Correct answer: -5 + 200 = 195
+    if (!answer2Ref.current) return;
+    const answer = parseInt(answer2Ref.current.value);
     if (answer === 195) {
-      feedbackRef.current.textContent = '✓ 正确！开伞高度 = 地面海拔 + 安全高度 = -5 + 200 = 195m';
-      feedbackRef.current.style.color = 'green';
+      setFeedback({text: '✓ 正确！开伞高度 = 地面海拔 + 安全高度 = -5 + 200 = 195m', type: 'success'});
+      setTask2Correct(true);
+      setGameComplete(true);
       if (onComplete) onComplete();
     } else {
-      feedbackRef.current.textContent = '✗ 错误。提示：开伞海拔 = 地面海拔 + 安全高度';
-      feedbackRef.current.style.color = 'red';
+      setFeedback({text: '✗ 错误。提示：开伞海拔 = 地面海拔 + 安全高度 = -5 + 200 = ?', type: 'error'});
     }
+  };
+
+  const feedbackStyles = {
+    success: { background: '#d4edda', color: '#155724', border: '1px solid #c3e6cb' },
+    error: { background: '#f8d7da', color: '#721c24', border: '1px solid #f5c6cb' },
+    info: { background: '#fff3cd', color: '#856404', border: '1px solid #ffeeba' }
   };
 
   return (
     <div style={{ width: '100%', height: '100%' }}>
       <div ref={containerRef} style={{ width: '100%', height: '60vh' }} />
-      
       <div style={{ padding: '20px', background: '#f0f0f0' }}>
-        <h3 style={{ margin: '0 0 15px 0' }}>🪂 关卡1：精准跳伞——有理数加减运算</h3>
+        <h3 style={{ margin: '0 0 15px 0' }}>🪂 关卡 1：精准跳伞——有理数加减运算</h3>
+        <p><strong>战场场景：</strong>飞机航线高度 +800m，目标区域地面海拔 -5m（低于海平面），周围山地海拔 +50m。</p>
+        <p style={{ fontSize: '14px', color: '#666' }}>当前高度：<span style={{ fontWeight: 'bold', color: '#ff6347' }}>{playerAltitude}m</span></p>
         
-        <div style={{ marginBottom: '20px' }}>
-          <p><strong>战场场景：</strong>飞机航线高度 +800m，目标区域地面海拔 -5m（低于海平面），周围山地海拔 +50m。</p>
-          
-          <div style={{ display: 'flex', gap: '15px', marginBottom: '15px' }}>
-            <button 
-              onClick={handleJump}
-              style={{ padding: '10px 20px', fontSize: '16px', cursor: 'pointer', background: '#ff6347', color: 'white', border: 'none', borderRadius: '5px' }}
-            >
-              🪂 跳伞
-            </button>
-            <button 
-              onClick={handleOpenParachute}
-              style={{ padding: '10px 20px', fontSize: '16px', cursor: 'pointer', background: '#4169e1', color: 'white', border: 'none', borderRadius: '5px' }}
-            >
-              ☂️ 开伞
-            </button>
-          </div>
+        <div style={{ display: 'flex', gap: '15px', marginBottom: '15px' }}>
+          <button onClick={handleJump} disabled={isJumping} style={{ padding: '12px 24px', fontSize: '16px', cursor: isJumping ? 'not-allowed' : 'pointer', background: isJumping ? '#ccc' : '#ff6347', color: 'white', border: 'none', borderRadius: '8px', transition: 'all 0.3s' }}>🪂 跳伞</button>
+          <button onClick={handleOpenParachute} disabled={!isJumping || parachuteOpen} style={{ padding: '12px 24px', fontSize: '16px', cursor: (!isJumping || parachuteOpen) ? 'not-allowed' : 'pointer', background: (!isJumping || parachuteOpen) ? '#ccc' : '#4169e1', color: 'white', border: 'none', borderRadius: '8px', transition: 'all 0.3s' }}>☂️ 开伞</button>
         </div>
 
-        <div style={{ marginBottom: '20px', padding: '15px', background: 'white', borderRadius: '8px' }}>
-          <h4 style={{ margin: '0 0 10px 0' }}>任务1：计算飞机与地面的相对高度差</h4>
+        <div style={{ marginBottom: '20px', padding: '15px', background: 'white', borderRadius: '8px', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}>
+          <h4 style={{ margin: '0 0 10px 0' }}>任务 1：计算飞机与地面的相对高度差</h4>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <input 
-              ref={answerInputRef}
-              type="number" 
-              placeholder="输入答案（米）"
-              style={{ padding: '8px', fontSize: '14px', width: '150px' }}
-            />
-            <button 
-              onClick={checkAnswer1}
-              style={{ padding: '8px 16px', cursor: 'pointer', background: '#28a745', color: 'white', border: 'none', borderRadius: '5px' }}
-            >
-              提交
-            </button>
+            <input ref={answer1Ref} type="number" placeholder="输入答案（米）" disabled={task1Correct} style={{ padding: '10px', fontSize: '14px', width: '180px', border: task1Correct ? '2px solid #28a745' : '2px solid #ddd', borderRadius: '6px' }} />
+            <button onClick={checkAnswer1} disabled={task1Correct} style={{ padding: '10px 20px', cursor: task1Correct ? 'not-allowed' : 'pointer', background: task1Correct ? '#28a745' : '#007bff', color: 'white', border: 'none', borderRadius: '6px' }}>{task1Correct ? '✓ 已完成' : '提交'}</button>
           </div>
         </div>
 
-        <div style={{ marginBottom: '20px', padding: '15px', background: 'white', borderRadius: '8px' }}>
-          <h4 style={{ margin: '0 0 10px 0' }}>任务2：开伞高度计算</h4>
-          <p>若开伞安全高度为 200m（离地高度），求从飞机上跳下后，下降到什么<b>海拔高度</b>时必须开伞？</p>
+        <div style={{ marginBottom: '20px', padding: '15px', background: 'white', borderRadius: '8px', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}>
+          <h4 style={{ margin: '0 0 10px 0' }}>任务 2：开伞高度计算</h4>
+          <p style={{ margin: '0 0 10px 0', color: '#666' }}>若开伞安全高度为 200m（离地高度），求下降到什么<b>海拔高度</b>时必须开伞？</p>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <input 
-              type="number" 
-              placeholder="输入海拔高度（米）"
-              style={{ padding: '8px', fontSize: '14px', width: '150px' }}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') checkAnswer2();
-              }}
-            />
-            <button 
-              onClick={checkAnswer2}
-              style={{ padding: '8px 16px', cursor: 'pointer', background: '#28a745', color: 'white', border: 'none', borderRadius: '5px' }}
-            >
-              提交
-            </button>
+            <input ref={answer2Ref} type="number" placeholder="输入海拔高度（米）" disabled={task2Correct} onKeyDown={(e) => e.key === 'Enter' && checkAnswer2()} style={{ padding: '10px', fontSize: '14px', width: '180px', border: task2Correct ? '2px solid #28a745' : '2px solid #ddd', borderRadius: '6px' }} />
+            <button onClick={checkAnswer2} disabled={task2Correct} style={{ padding: '10px 20px', cursor: task2Correct ? 'not-allowed' : 'pointer', background: task2Correct ? '#28a745' : '#007bff', color: 'white', border: 'none', borderRadius: '6px' }}>{task2Correct ? '✓ 已完成' : '提交'}</button>
           </div>
         </div>
 
-        <div 
-          ref={feedbackRef}
-          style={{ padding: '10px', background: '#fff3cd', borderRadius: '5px', fontWeight: 'bold' }}
-        >
-          等待作答...
-        </div>
+        <div style={{ padding: '15px', borderRadius: '8px', fontWeight: 'bold', ...feedbackStyles[feedback.type] }}>{feedback.text}</div>
 
-        <div style={{ marginTop: '15px', padding: '10px', background: '#e7f3ff', borderRadius: '5px' }}>
+        {gameComplete && (
+          <div style={{ marginTop: '15px', padding: '20px', background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', color: 'white', borderRadius: '8px', textAlign: 'center' }}>
+            <h3 style={{ margin: '0 0 10px 0' }}>🎉 恭喜完成关卡 1！</h3>
+            <p>你已经掌握了有理数加减运算在实际场景中的应用！</p>
+          </div>
+        )}
+
+        <div style={{ marginTop: '15px', padding: '15px', background: '#e7f3ff', borderRadius: '8px', borderLeft: '4px solid #007bff' }}>
           <strong>🎯 数学目标：</strong>熟练掌握有理数减法法则，理解"负数"在现实海拔中的意义。
         </div>
       </div>
