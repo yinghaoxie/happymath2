@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { useEffect, useRef, useState } from 'react';
+import './Level1.css';
 
 interface Level1Props {
   onComplete?: () => void;
@@ -597,46 +598,79 @@ export default function Level1({ onComplete }: Level1Props) {
   };
 
   return (
-    <div style={{ width: '100%', height: '100%' }}>
-      <div ref={containerRef} style={{ width: '100%', height: '60vh' }} />
-      <div style={{ padding: '20px', background: '#f0f0f0' }}>
-        <h3 style={{ margin: '0 0 15px 0' }}>🪂 关卡 1：精准跳伞——有理数加减运算</h3>
-        <p><strong>战场场景：</strong>飞机航线高度 +800m，目标区域地面海拔 -5m（低于海平面），周围山地海拔 +50m。</p>
-        <p style={{ fontSize: '14px', color: '#666' }}>当前高度：<span style={{ fontWeight: 'bold', color: '#ff6347' }}>{playerAltitude}m</span></p>
-        
-        <div style={{ display: 'flex', gap: '15px', marginBottom: '15px' }}>
-          <button onClick={handleJump} disabled={isJumping} style={{ padding: '12px 24px', fontSize: '16px', cursor: isJumping ? 'not-allowed' : 'pointer', background: isJumping ? '#ccc' : '#ff6347', color: 'white', border: 'none', borderRadius: '8px', transition: 'all 0.3s' }}>🪂 跳伞</button>
-          <button onClick={handleOpenParachute} disabled={!isJumping || parachuteOpen} style={{ padding: '12px 24px', fontSize: '16px', cursor: (!isJumping || parachuteOpen) ? 'not-allowed' : 'pointer', background: (!isJumping || parachuteOpen) ? '#ccc' : '#4169e1', color: 'white', border: 'none', borderRadius: '8px', transition: 'all 0.3s' }}>☂️ 开伞</button>
+    <div className="level1-container">
+      {/* 左侧面板：题目描述 */}
+      <div className="left-panel">
+        <div className="level-header">
+          <h2>🪂 关卡 1：精准跳伞——有理数加减运算</h2>
         </div>
 
-        <div style={{ marginBottom: '20px', padding: '15px', background: 'white', borderRadius: '8px', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}>
-          <h4 style={{ margin: '0 0 10px 0' }}>任务 1：计算飞机与地面的相对高度差</h4>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <input ref={answer1Ref} type="number" placeholder="输入答案（米）" disabled={task1Correct} style={{ padding: '10px', fontSize: '14px', width: '180px', border: task1Correct ? '2px solid #28a745' : '2px solid #ddd', borderRadius: '6px' }} />
-            <button onClick={checkAnswer1} disabled={task1Correct} style={{ padding: '10px 20px', cursor: task1Correct ? 'not-allowed' : 'pointer', background: task1Correct ? '#28a745' : '#007bff', color: 'white', border: 'none', borderRadius: '6px' }}>{task1Correct ? '✓ 已完成' : '提交'}</button>
-          </div>
+        <div className="content-section">
+          <h3>🌍 战场场景</h3>
+          <p>飞机航线高度 <strong>+800m</strong>，目标区域地面海拔 <strong>-5m</strong>（低于海平面），周围山地海拔 <strong>+50m</strong>。</p>
         </div>
 
-        <div style={{ marginBottom: '20px', padding: '15px', background: 'white', borderRadius: '8px', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}>
-          <h4 style={{ margin: '0 0 10px 0' }}>任务 2：开伞高度计算</h4>
-          <p style={{ margin: '0 0 10px 0', color: '#666' }}>若开伞安全高度为 200m（离地高度），求下降到什么<b>海拔高度</b>时必须开伞？</p>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <input ref={answer2Ref} type="number" placeholder="输入海拔高度（米）" disabled={task2Correct} onKeyDown={(e) => e.key === 'Enter' && checkAnswer2()} style={{ padding: '10px', fontSize: '14px', width: '180px', border: task2Correct ? '2px solid #28a745' : '2px solid #ddd', borderRadius: '6px' }} />
-            <button onClick={checkAnswer2} disabled={task2Correct} style={{ padding: '10px 20px', cursor: task2Correct ? 'not-allowed' : 'pointer', background: task2Correct ? '#28a745' : '#007bff', color: 'white', border: 'none', borderRadius: '6px' }}>{task2Correct ? '✓ 已完成' : '提交'}</button>
-          </div>
+        <div className="content-section">
+          <h3>🎯 任务指令</h3>
+          <ol>
+            <li>计算飞机与地面的相对高度差（正负数加减）。</li>
+            <li>若开伞安全高度为 200m（离地高度），求下降到什么<b>海拔高度</b>时必须开伞？</li>
+          </ol>
         </div>
 
-        <div style={{ padding: '15px', borderRadius: '8px', fontWeight: 'bold', ...feedbackStyles[feedback.type] }}>{feedback.text}</div>
-
-        {gameComplete && (
-          <div style={{ marginTop: '15px', padding: '20px', background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', color: 'white', borderRadius: '8px', textAlign: 'center' }}>
-            <h3 style={{ margin: '0 0 10px 0' }}>🎉 恭喜完成关卡 1！</h3>
-            <p>你已经掌握了有理数加减运算在实际场景中的应用！</p>
+        <div className="interaction-area">
+          <div className="task-card">
+            <h4>任务 1：相对高度差</h4>
+            <div className="input-row">
+              <input ref={answer1Ref} type="number" placeholder="输入答案（米）" disabled={task1Correct} />
+              <button onClick={checkAnswer1} disabled={task1Correct}>
+                {task1Correct ? '✓ 已完成' : '提交'}
+              </button>
+            </div>
           </div>
-        )}
 
-        <div style={{ marginTop: '15px', padding: '15px', background: '#e7f3ff', borderRadius: '8px', borderLeft: '4px solid #007bff' }}>
+          <div className="task-card">
+            <h4>任务 2：开伞海拔高度</h4>
+            <p className="hint">提示：开伞安全高度为 200m（离地高度）</p>
+            <div className="input-row">
+              <input ref={answer2Ref} type="number" placeholder="输入海拔高度（米）" disabled={task2Correct} onKeyDown={(e) => e.key === 'Enter' && checkAnswer2()} />
+              <button onClick={checkAnswer2} disabled={task2Correct}>
+                {task2Correct ? '✓ 已完成' : '提交'}
+              </button>
+            </div>
+          </div>
+
+          <div className={`feedback ${feedback.type}`}>{feedback.text}</div>
+
+          {gameComplete && (
+            <div className="success-banner">
+              <h3>🎉 恭喜完成关卡 1！</h3>
+              <p>你已经掌握了有理数加减运算在实际场景中的应用！</p>
+            </div>
+          )}
+        </div>
+
+        <div className="math-goal">
           <strong>🎯 数学目标：</strong>熟练掌握有理数减法法则，理解"负数"在现实海拔中的意义。
+        </div>
+      </div>
+
+      {/* 右侧面板：3D 动画演示区 */}
+      <div className="right-panel">
+        <div className="animation-header">
+          <span className="altitude-display">当前高度：<strong>{playerAltitude}m</strong></span>
+          <div className="control-buttons">
+            <button onClick={handleJump} disabled={isJumping} className="btn-jump">
+              {isJumping ? '正在跳伞...' : '🪂 跳伞'}
+            </button>
+            <button onClick={handleOpenParachute} disabled={!isJumping || parachuteOpen} className="btn-parachute">
+              {parachuteOpen ? '☂️ 伞已打开' : '☂️ 开伞'}
+            </button>
+          </div>
+        </div>
+        <div ref={containerRef} className="canvas-container" />
+        <div className="overlay-hint">
+          <p>💡 观察 3D 场景中的海拔标签，辅助解题</p>
         </div>
       </div>
     </div>
